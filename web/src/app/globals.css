@@ -3,23 +3,24 @@
 @tailwind utilities;
 
 :root {
-  --espresso: #17120f;
-  --roast: #261a15;
-  --caramel: #c88b50;
-  --oat: #f5efe4;
-  --porcelain: #fff9f1;
-  --sage: #8b9b7e;
-  --coral: #d86f51;
-  --success: #4d9276;
-  --ink: #281d18;
+  --espresso: #241710;
+  --roast: #493123;
+  --cream: #f5efe5;
+  --oat: #f5efe5;
+  --porcelain: #faf6ef;
+  --milk-foam: #e6d5bd;
+  --caramel: #bd8755;
+  --sage: #84947a;
+  --coral: #b85a42;
+  --success: #5b7a5e;
+  --ink: #241710;
   --font-dm-sans: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-cormorant: "Cormorant Garamond", Georgia, serif;
   --font-space-grotesk: "Space Grotesk", ui-monospace, monospace;
 }
 
 html {
-  scroll-behavior: smooth;
-  background-color: var(--oat);
+  background-color: var(--cream);
   color: var(--ink);
 }
 
@@ -39,7 +40,7 @@ html {
 body {
   font-family: var(--font-dm-sans), system-ui, -apple-system, sans-serif;
   color: var(--ink);
-  background-color: var(--oat);
+  background-color: var(--cream);
   overflow-x: hidden;
 }
 
@@ -52,22 +53,28 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Ceramic matte card surface for functional app views */
+/* Matte stoneware paper surface for functional café views */
 .ceramic-card {
   background: var(--porcelain);
-  border: 1px solid rgba(40, 29, 24, 0.1);
-  box-shadow: 0 8px 28px -12px rgba(23, 18, 15, 0.1), 0 1px 2px rgba(23, 18, 15, 0.05);
+  border: 1px solid rgba(36, 23, 16, 0.09);
+  box-shadow: 0 10px 30px -14px rgba(36, 23, 16, 0.1), 0 1px 2px rgba(36, 23, 16, 0.04);
 }
 
-/* Dark espresso glass overlay reserved strictly for dark hero surfaces */
-.espresso-glass {
-  background: rgba(23, 18, 15, 0.72);
-  border: 1px solid rgba(200, 139, 80, 0.22);
-  backdrop-filter: blur(12px);
+/* Editorial matte espresso panel strictly for dark hero narrative sections */
+.editorial-dark-panel {
+  background: rgba(36, 23, 16, 0.84);
+  border: 1px solid rgba(230, 213, 189, 0.16);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 24px 60px -24px rgba(10, 6, 4, 0.72);
+}
+
+/* Subtle hairline divider */
+.hairline-cream {
+  border-color: rgba(36, 23, 16, 0.1);
 }
 
 /* Accessible focus ring */
 *:focus-visible {
-  outline: 2px solid #c88b50;
+  outline: 2px solid #bd8755;
   outline-offset: 2px;
 }

@@ -45,13 +45,13 @@ export default function StaffOrdersPage() {
 
   return (
     <StaffGate>
-      <div className="min-h-screen bg-oat text-ink">
+      <div className="min-h-screen bg-cream text-espresso">
         <Navbar variant="staff" />
         <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-espresso/10 pb-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-caramel">Barista Fulfillment Queue</p>
-              <h1 className="font-display mt-1 text-4xl font-semibold">Orders & State Transitions</h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-caramel">Barista Fulfillment Queue</p>
+              <h1 className="font-display mt-1 text-4xl font-semibold sm:text-5xl">Orders & State Transitions</h1>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {["all", "confirmed", "preparing", "ready", "collected", "cancelled"].map((st) => (
@@ -60,7 +60,9 @@ export default function StaffOrdersPage() {
                   type="button"
                   onClick={() => setFilter(st)}
                   className={`rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize ${
-                    filter === st ? "bg-espresso text-porcelain" : "border border-ink/15 bg-porcelain text-ink"
+                    filter === st
+                      ? "bg-espresso text-cream"
+                      : "border border-espresso/15 bg-porcelain text-espresso hover:border-caramel"
                   }`}
                 >
                   {st}
@@ -73,7 +75,7 @@ export default function StaffOrdersPage() {
 
           <div className="ceramic-card overflow-x-auto rounded-3xl p-4">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-ink/10 text-xs uppercase text-ink/60">
+              <thead className="border-b border-espresso/10 text-xs uppercase text-roast/65">
                 <tr>
                   <th className="p-3">Order</th>
                   <th className="p-3">Guest</th>
@@ -84,34 +86,53 @@ export default function StaffOrdersPage() {
                   <th className="p-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink/10">
+              <tbody className="divide-y divide-espresso/10">
                 {orders.map((o) => (
-                  <tr key={o.id}>
+                  <tr key={o.id} className="hover:bg-cream/50">
                     <td className="font-mono-num p-3 text-xs font-semibold">#{o.id}</td>
                     <td className="p-3">
                       {o.customerName}
-                      {o.tableId ? <span className="ml-1.5 rounded bg-sage/20 px-1.5 py-0.5 text-[10px]">Seat {o.tableId}</span> : null}
+                      {o.tableId ? (
+                        <span className="ml-1.5 rounded bg-sage/20 px-1.5 py-0.5 text-[10px]">Seat {o.tableId}</span>
+                      ) : null}
                     </td>
                     <td className="p-3 text-xs">{o.items.map((i) => `${i.qty}× ${i.name}`).join(", ")}</td>
                     <td className="font-mono-num p-3 font-semibold">{formatRupees(o.totalPaise)}</td>
                     <td className="p-3">
-                      <span className="rounded-full bg-oat px-2.5 py-0.5 text-xs font-semibold capitalize">{o.status}</span>
+                      <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs font-semibold capitalize">{o.status}</span>
                     </td>
-                    <td className="p-3 text-xs text-ink/70">{o.consumedAt ? "Consumed once" : o.status === "cancelled" ? "Released" : "Reserved"}</td>
+                    <td className="p-3 text-xs text-roast/75">
+                      {o.consumedAt ? "Consumed once" : o.status === "cancelled" ? "Released" : "Reserved"}
+                    </td>
                     <td className="p-3">
                       <div className="flex flex-wrap gap-1.5">
                         {o.status === "confirmed" && (
-                          <button type="button" disabled={busy === o.id} onClick={() => transition(o.id, "preparing")} className="rounded-full bg-roast px-3 py-1 text-xs font-semibold text-porcelain">
+                          <button
+                            type="button"
+                            disabled={busy === o.id}
+                            onClick={() => transition(o.id, "preparing")}
+                            className="rounded-full bg-roast px-3 py-1 text-xs font-semibold text-cream"
+                          >
                             Preparing
                           </button>
                         )}
                         {(o.status === "confirmed" || o.status === "preparing") && (
-                          <button type="button" disabled={busy === o.id} onClick={() => transition(o.id, "ready")} className="rounded-full bg-success px-3 py-1 text-xs font-semibold text-white">
+                          <button
+                            type="button"
+                            disabled={busy === o.id}
+                            onClick={() => transition(o.id, "ready")}
+                            className="rounded-full bg-success px-3 py-1 text-xs font-semibold text-white"
+                          >
                             Ready
                           </button>
                         )}
                         {o.status === "ready" && (
-                          <button type="button" disabled={busy === o.id} onClick={() => transition(o.id, "collected")} className="rounded-full border border-espresso px-3 py-1 text-xs font-semibold">
+                          <button
+                            type="button"
+                            disabled={busy === o.id}
+                            onClick={() => transition(o.id, "collected")}
+                            className="rounded-full border border-espresso px-3 py-1 text-xs font-semibold"
+                          >
                             Collected
                           </button>
                         )}

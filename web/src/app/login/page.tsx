@@ -58,7 +58,11 @@ function LoginContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSelect = async (personaKey: "customer-1" | "customer-2" | "barista-1" | "manager-1", dest: string, needsPasscode: boolean) => {
+  const handleSelect = async (
+    personaKey: "customer-1" | "customer-2" | "barista-1" | "manager-1",
+    dest: string,
+    needsPasscode: boolean
+  ) => {
     if (needsPasscode && !staffPasscode.trim()) {
       setError("Enter the café staff passcode below before signing into a barista or manager account.");
       return;
@@ -76,15 +80,15 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-oat text-ink">
+    <div className="min-h-screen bg-cream text-espresso">
       <Navbar variant="app" />
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <div className="mb-8 text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-caramel/40 bg-caramel/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-roast">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-caramel/40 bg-milk/50 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-roast">
             <Wrench className="h-3.5 w-3.5" /> Isolated Demo Identity · demo-cafe
           </span>
           <h1 className="font-display mt-3 text-4xl font-semibold sm:text-5xl">Choose Your Perspective</h1>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-ink/70">
+          <p className="mx-auto mt-2 max-w-xl text-sm text-roast/75">
             Customer demo accounts are open to try immediately. Barista and Manager accounts are server-gated with a staff passcode (or Firebase café-scoped custom claims).
           </p>
         </div>
@@ -93,13 +97,20 @@ function LoginContent() {
           <div className="ceramic-card mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
             <div className="text-sm">
               Currently signed in as <strong>{user.displayName}</strong>{" "}
-              <span className="rounded-full bg-caramel/20 px-2 py-0.5 text-xs font-semibold uppercase text-roast">{user.role}</span>
+              <span className="rounded-full bg-milk px-2.5 py-0.5 text-xs font-semibold uppercase text-roast">{user.role}</span>
             </div>
             <div className="flex gap-2">
-              <Link href={user.role === "customer" ? "/app" : "/staff"} className="rounded-full bg-espresso px-4 py-1.5 text-xs font-semibold text-porcelain">
+              <Link
+                href={user.role === "customer" ? "/app" : "/staff"}
+                className="rounded-full bg-espresso px-4 py-1.5 text-xs font-semibold text-cream"
+              >
                 Continue
               </Link>
-              <button type="button" onClick={logout} className="rounded-full border border-ink/20 px-4 py-1.5 text-xs font-medium hover:bg-oat">
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-full border border-espresso/20 px-4 py-1.5 text-xs font-medium hover:bg-cream"
+              >
                 Sign out
               </button>
             </div>
@@ -107,13 +118,13 @@ function LoginContent() {
         )}
 
         {error && (
-          <div className="mb-6 rounded-xl border border-coral/40 bg-coral/10 p-4 text-sm text-coral" role="alert">
+          <div className="mb-6 rounded-xl border border-coral/35 bg-coral/10 p-4 text-sm text-coral" role="alert">
             {error}
           </div>
         )}
 
         <section className="space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-ink/60">Customer Perspectives (Public Demo)</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-roast/65">Customer Perspectives (Public Demo)</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {CUSTOMER_PERSONAS.map((p) => {
               const Icon = p.icon;
@@ -127,17 +138,15 @@ function LoginContent() {
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-espresso text-caramel-light">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-espresso text-milk">
                         <Icon className="h-5 w-5" />
                       </span>
-                      <span className="rounded-full bg-sage/20 px-3 py-1 text-[11px] font-semibold text-espresso">
-                        {p.badge}
-                      </span>
+                      <span className="rounded-full bg-sage/20 px-3 py-1 text-[11px] font-semibold text-espresso">{p.badge}</span>
                     </div>
-                    <h3 className="font-display mt-4 text-2xl font-semibold text-ink">
-                      {p.name} <span className="text-base font-normal text-ink/60">· {p.role}</span>
+                    <h3 className="font-display mt-4 text-2xl font-semibold text-espresso">
+                      {p.name} <span className="text-base font-normal text-roast/65">· {p.role}</span>
                     </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink/70">{p.desc}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-roast/75">{p.desc}</p>
                   </div>
                   <div className="mt-5 flex items-center gap-1.5 text-sm font-semibold text-roast group-hover:text-caramel">
                     {busy === p.key ? "Signing in..." : `Enter as ${p.name}`}
@@ -151,17 +160,19 @@ function LoginContent() {
 
         <section className="mt-8 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-ink/60">Staff & Manager Perspectives (Passcode Gated)</h2>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-roast/65">Staff & Manager Perspectives (Passcode Gated)</h2>
             <div className="flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-caramel" />
-              <label htmlFor="staff-passcode" className="sr-only">Staff passcode</label>
+              <label htmlFor="staff-passcode" className="sr-only">
+                Staff passcode
+              </label>
               <input
                 id="staff-passcode"
                 type="password"
                 value={staffPasscode}
                 onChange={(e) => setStaffPasscode(e.target.value)}
                 placeholder="Enter staff passcode..."
-                className="rounded-full border border-ink/20 bg-white px-4 py-1.5 text-sm focus:border-caramel focus:outline-none"
+                className="rounded-full border border-espresso/20 bg-white px-4 py-1.5 text-sm focus:border-caramel focus:outline-none"
               />
             </div>
           </div>
@@ -179,17 +190,15 @@ function LoginContent() {
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-roast text-caramel-light">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-roast text-milk">
                         <Icon className="h-5 w-5" />
                       </span>
-                      <span className="rounded-full bg-caramel/20 px-3 py-1 text-[11px] font-semibold text-roast">
-                        {p.badge}
-                      </span>
+                      <span className="rounded-full bg-milk px-3 py-1 text-[11px] font-semibold text-roast">{p.badge}</span>
                     </div>
-                    <h3 className="font-display mt-4 text-2xl font-semibold text-ink">
-                      {p.name} <span className="text-base font-normal text-ink/60">· {p.role}</span>
+                    <h3 className="font-display mt-4 text-2xl font-semibold text-espresso">
+                      {p.name} <span className="text-base font-normal text-roast/65">· {p.role}</span>
                     </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink/70">{p.desc}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-roast/75">{p.desc}</p>
                   </div>
                   <div className="mt-5 flex items-center gap-1.5 text-sm font-semibold text-roast group-hover:text-caramel">
                     {busy === p.key ? "Verifying passcode..." : `Enter as ${p.name}`}
@@ -207,7 +216,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-oat p-10 text-center text-sm text-ink/60">Loading sign-in...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-cream p-10 text-center text-sm text-roast/65">Loading sign-in...</div>}>
       <LoginContent />
     </Suspense>
   );

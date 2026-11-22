@@ -3,7 +3,9 @@ import { test, expect } from "@playwright/test";
 const STAFF_PASSCODE = process.env.DEMO_STAFF_PASSCODE || "aura-local-staff-2026";
 
 test.describe("AURA — Full E2E Customer ↔ Inventory Connected Journeys", () => {
-  test("1. Homepage loads fast with instant CTAs, WebGL/fallback resilience & real performance metrics", async ({ page }) => {
+  test("1. Homepage loads fast with instant CTAs, 5-scene coffee physics narrative & real performance metrics", async ({
+    page,
+  }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const start = Date.now();
@@ -11,9 +13,14 @@ test.describe("AURA — Full E2E Customer ↔ Inventory Connected Journeys", () 
     const loadMs = Date.now() - start;
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("AURA");
-    await expect(page.getByRole("link", { name: "Enter the Café" }).first()).toBeVisible();
-    await expect(page.getByText("04 · The Intelligence Flow")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Every cup begins with understanding.");
+    await expect(page.getByRole("link", { name: "Enter Your Café" }).first()).toBeVisible();
+    await expect(page.getByText("More than coffee.")).toBeVisible();
+    await expect(page.getByText("Every ingredient tells a story.")).toBeVisible();
+    await expect(page.getByText("04 · Intelligent Inventory")).toBeVisible();
+    await expect(page.getByText("One connected café.")).toBeVisible();
 
+    await page.waitForTimeout(800);
     const perf = await page.evaluate(() => {
       const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
       return {
@@ -23,13 +30,14 @@ test.describe("AURA — Full E2E Customer ↔ Inventory Connected Journeys", () 
           document.querySelector('[data-testid="hero-webgl-container"]') ||
             document.querySelector('[data-testid="hero-fallback-visual"]')
         ),
+        stats3D: (window as unknown as { __AURA_3D_STATS__?: unknown }).__AURA_3D_STATS__ || null,
       };
     });
     expect(perf.hasCanvasOrFallback).toBe(true);
     console.log("PERF_HOME:", JSON.stringify({ loadMs, ...perf, pageErrors: errors }));
 
-    // Enter the Café CTA navigates immediately without waiting for scroll completion
-    await page.getByRole("link", { name: "Enter the Café" }).first().click();
+    // Enter Your Café CTA navigates immediately without waiting for scroll completion
+    await page.getByRole("link", { name: "Enter Your Café" }).first().click();
     await expect(page).toHaveURL(/\/app/);
     await expect(page.getByRole("heading", { name: /What brings you in today/i })).toBeVisible();
     expect(errors).toEqual([]);
@@ -52,7 +60,7 @@ test.describe("AURA — Full E2E Customer ↔ Inventory Connected Journeys", () 
 
     await page.goto("/", { waitUntil: "load" });
     await expect(page.getByTestId("hero-fallback-visual")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Enter the Café" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Enter Your Café" }).first()).toBeVisible();
     await context.close();
   });
 
@@ -125,22 +133,30 @@ test.describe("AURA — Full E2E Customer ↔ Inventory Connected Journeys", () 
     await staffContext.close();
   });
 
-  test("4. Menu browsing, Room floorplan, Opt-in Connect & Responsive widths (390 / 768 / 1280 / 1440)", async ({ page }) => {
+  test("4. Menu photography, Room floorplan & Responsive widths (390 / 768 / 1280 / 1440)", async ({ page }) => {
     await page.goto("/app/menu/", { waitUntil: "load" });
     await expect(page.getByRole("heading", { name: "Crafted Menu" })).toBeVisible();
     await expect(page.getByText("Iced Oat Velvet Latte")).toBeVisible({ timeout: 15000 });
+
+    const brokenImgs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("img")).filter((img) => !img.complete || img.naturalWidth === 0).length
+    );
+    expect(brokenImgs).toBe(0);
 
     await page.goto("/app/room/", { waitUntil: "load" });
     await expect(page.getByRole("heading", { name: "The Living Room" })).toBeVisible();
     await page.getByRole("button", { name: /Accessible List/i }).click();
     await expect(page.getByRole("table")).toBeVisible();
 
-    // Check responsive viewports have zero horizontal overflow
     for (const width of [390, 768, 1280, 1440]) {
       await page.setViewportSize({ width, height: 844 });
+      await page.goto("/", { waitUntil: "load" });
+      const homeOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(homeOverflow).toBeLessThanOrEqual(4);
+
       await page.goto("/app/", { waitUntil: "load" });
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      expect(overflow).toBeLessThanOrEqual(4);
+      const appOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(appOverflow).toBeLessThanOrEqual(4);
     }
   });
 });

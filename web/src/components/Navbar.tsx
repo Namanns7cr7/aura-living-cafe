@@ -3,7 +3,19 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Coffee, LayoutDashboard, LogOut, Menu, ShoppingBag, Users, Armchair, ClipboardList, Sparkles, X, ShieldCheck } from "lucide-react";
+import {
+  Armchair,
+  ClipboardList,
+  Coffee,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 
@@ -44,51 +56,64 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
     <header
       className={`sticky top-0 z-40 border-b transition-colors ${
         isDark
-          ? "border-caramel/20 bg-espresso/85 text-porcelain backdrop-blur-md"
-          : "border-ink/10 bg-porcelain/95 text-ink backdrop-blur-md"
+          ? "border-milk/15 bg-espresso/85 text-cream backdrop-blur-md"
+          : "border-espresso/10 bg-porcelain/95 text-espresso backdrop-blur-md"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Wordmark */}
-        <Link href="/" className="flex items-center gap-2.5 focus:outline-none">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-caramel text-espresso shadow-sm">
-            <Coffee className="h-4 w-4" aria-hidden="true" />
+        {/* Brand Wordmark */}
+        <Link href="/" className="flex items-center gap-3 focus:outline-none">
+          <span
+            className={`flex h-9 w-9 items-center justify-center rounded-full border ${
+              isDark
+                ? "border-caramel/40 bg-roast/70 text-milk"
+                : "border-espresso/15 bg-espresso text-cream"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <ellipse cx="12" cy="12" rx="6.5" ry="9" transform="rotate(-18 12 12)" />
+              <path d="M10.5 4.5 C12.5 9.5, 11.5 14.5, 13.5 19.5" strokeLinecap="round" />
+            </svg>
           </span>
           <div className="leading-tight">
-            <span className="font-display text-xl font-semibold tracking-wider">AURA</span>
-            <span className={`block text-[10px] uppercase tracking-[0.22em] ${isDark ? "text-caramel-light" : "text-ink/60"}`}>
+            <span className="font-display text-2xl font-semibold tracking-[0.14em]">AURA</span>
+            <span
+              className={`block text-[10px] uppercase tracking-[0.26em] ${
+                isDark ? "text-milk/70" : "text-roast/70"
+              }`}
+            >
               The Living Café
             </span>
           </div>
         </Link>
 
-        {/* Desktop Nav */}
+        {/* Desktop Navigation */}
         {variant === "public" ? (
-          <nav aria-label="Landing navigation" className="hidden items-center gap-7 md:flex">
-            <a href="#scene-ripple" className="text-sm text-oat/80 hover:text-caramel-light">
+          <nav aria-label="Landing navigation" className="hidden items-center gap-7 lg:flex">
+            <a href="#scene-experience" className="text-sm text-milk/80 transition hover:text-cream">
               Experience
             </a>
-            <a href="#scene-flow" className="text-sm text-oat/80 hover:text-caramel-light">
-              How it works
+            <a href="#scene-bean-to-cup" className="text-sm text-milk/80 transition hover:text-cream">
+              Craft
             </a>
-            <a href="#scene-perspectives" className="text-sm text-oat/80 hover:text-caramel-light">
-              For cafés
+            <a href="#scene-inventory" className="text-sm text-milk/80 transition hover:text-cream">
+              Inventory
             </a>
             <Link
               href="/staff"
-              className="rounded-full border border-caramel/40 px-4 py-1.5 text-sm font-medium text-caramel-light hover:bg-caramel/10"
+              className="rounded-full border border-milk/25 px-4 py-1.5 text-sm font-medium text-milk transition hover:border-caramel hover:text-cream"
             >
               Staff Console
             </Link>
             <Link
               href="/app"
-              className="rounded-full bg-caramel px-5 py-2 text-sm font-semibold text-espresso shadow-glow hover:bg-caramel-light"
+              className="rounded-full bg-cream px-5 py-2 text-sm font-semibold text-espresso transition hover:bg-milk"
             >
               Enter the Café
             </Link>
           </nav>
         ) : (
-          <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
+          <nav aria-label="Main navigation" className="hidden items-center gap-1 lg:flex">
             {activeLinks.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href || pathname === `${item.href}/`;
@@ -98,8 +123,8 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
                   href={item.href}
                   className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition ${
                     active
-                      ? "bg-espresso text-porcelain"
-                      : "text-ink/75 hover:bg-oat hover:text-ink"
+                      ? "bg-espresso text-cream"
+                      : "text-roast/80 hover:bg-cream hover:text-espresso"
                   }`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
@@ -110,7 +135,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
             {variant === "app" && isStaff && (
               <Link
                 href="/staff"
-                className="ml-2 flex items-center gap-1.5 rounded-full border border-caramel/50 bg-caramel/10 px-3.5 py-1.5 text-xs font-semibold text-roast hover:bg-caramel/20"
+                className="ml-2 flex items-center gap-1.5 rounded-full border border-caramel/45 bg-caramel/10 px-3.5 py-1.5 text-xs font-semibold text-roast transition hover:bg-caramel/20"
               >
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 Staff Console
@@ -119,7 +144,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
             {variant === "staff" && (
               <Link
                 href="/app"
-                className="ml-2 flex items-center gap-1.5 rounded-full border border-ink/15 px-3.5 py-1.5 text-xs font-medium text-ink/80 hover:bg-oat"
+                className="ml-2 flex items-center gap-1.5 rounded-full border border-espresso/15 px-3.5 py-1.5 text-xs font-medium text-roast transition hover:bg-cream"
               >
                 Customer View
               </Link>
@@ -136,12 +161,12 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
               aria-label={`Open cart with ${totalCount} items`}
               className={`relative flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition ${
                 isDark
-                  ? "border border-caramel/30 text-porcelain hover:bg-caramel/15"
-                  : "border border-ink/15 bg-oat text-ink hover:bg-caramel/15"
+                  ? "border border-milk/25 text-cream hover:bg-roast/60"
+                  : "border border-espresso/15 bg-cream text-espresso hover:border-caramel"
               }`}
             >
               <ShoppingBag className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Cart</span>
+              <span className="hidden sm:inline">Tray</span>
               {totalCount > 0 && (
                 <span className="font-mono-num flex h-5 min-w-5 items-center justify-center rounded-full bg-caramel px-1.5 text-xs font-bold text-espresso">
                   {totalCount}
@@ -154,7 +179,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
             <div className="hidden items-center gap-2 sm:flex">
               <span
                 className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  isDark ? "bg-roast text-caramel-light" : "bg-oat text-ink"
+                  isDark ? "bg-roast text-milk" : "bg-cream text-espresso border border-espresso/10"
                 }`}
               >
                 {user.displayName} · <span className="uppercase text-caramel">{user.role}</span>
@@ -165,7 +190,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
                 title="Sign out"
                 aria-label="Sign out"
                 className={`rounded-full p-2 transition ${
-                  isDark ? "text-oat/70 hover:bg-roast hover:text-porcelain" : "text-ink/70 hover:bg-oat hover:text-ink"
+                  isDark ? "text-milk/70 hover:bg-roast hover:text-cream" : "text-roast/70 hover:bg-cream hover:text-espresso"
                 }`}
               >
                 <LogOut className="h-4 w-4" />
@@ -176,8 +201,8 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
               href="/login"
               className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                 isDark
-                  ? "border border-oat/30 text-porcelain hover:bg-oat/10"
-                  : "bg-espresso text-porcelain hover:bg-roast"
+                  ? "border border-milk/25 text-cream hover:bg-roast/60"
+                  : "bg-espresso text-cream hover:bg-roast"
               }`}
             >
               Sign in
@@ -186,7 +211,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
 
           <button
             type="button"
-            className="rounded-lg p-2 md:hidden"
+            className="rounded-lg p-2 lg:hidden"
             aria-label="Toggle navigation menu"
             onClick={() => setMobileOpen((v) => !v)}
           >
@@ -197,14 +222,26 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
 
       {/* Mobile Drawer */}
       {mobileOpen && (
-        <div className={`border-t px-4 py-3 md:hidden ${isDark ? "border-caramel/20 bg-espresso text-porcelain" : "border-ink/10 bg-porcelain text-ink"}`}>
+        <div
+          className={`border-t px-4 py-3 lg:hidden ${
+            isDark ? "border-milk/15 bg-espresso text-cream" : "border-espresso/10 bg-porcelain text-espresso"
+          }`}
+        >
           <div className="flex flex-col gap-2">
             {variant === "public" ? (
               <>
-                <Link href="/app" onClick={() => setMobileOpen(false)} className="rounded-lg bg-caramel px-4 py-2.5 text-center font-semibold text-espresso">
+                <Link
+                  href="/app"
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-full bg-cream px-4 py-2.5 text-center font-semibold text-espresso"
+                >
                   Enter the Café
                 </Link>
-                <Link href="/staff" onClick={() => setMobileOpen(false)} className="rounded-lg border border-caramel/40 px-4 py-2 text-center text-sm text-caramel-light">
+                <Link
+                  href="/staff"
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-full border border-milk/30 px-4 py-2 text-center text-sm text-milk"
+                >
                   Open Staff Console
                 </Link>
               </>
@@ -214,7 +251,7 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
-                  className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-oat/20"
+                  className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-cream/60"
                 >
                   {item.label}
                 </Link>
@@ -223,7 +260,9 @@ export function Navbar({ variant = "app" }: { variant?: "public" | "app" | "staf
             <div className="mt-2 flex items-center justify-between border-t border-current/10 pt-2">
               {user ? (
                 <>
-                  <span className="text-xs opacity-80">{user.displayName} ({user.role})</span>
+                  <span className="text-xs opacity-80">
+                    {user.displayName} ({user.role})
+                  </span>
                   <button type="button" onClick={handleLogout} className="text-xs font-semibold text-coral">
                     Sign out
                   </button>

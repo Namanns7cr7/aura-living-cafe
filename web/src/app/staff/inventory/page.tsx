@@ -19,12 +19,15 @@ interface MenuServingRow {
   limitingIngredientName?: string | null;
 }
 
+const ING_CATEGORIES = ["all", "beans", "milk", "syrup", "tea", "bakery", "garnish", "packaging"] as const;
+
 export default function StaffInventoryPage() {
   const { user, token } = useAuth();
   const [ingredients, setIngredients] = useState<IngredientView[]>([]);
   const [menuServings, setMenuServings] = useState<MenuServingRow[]>([]);
   const [events, setEvents] = useState<InventoryEvent[]>([]);
   const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState<string>("all");
   const [restockDelta, setRestockDelta] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +36,11 @@ export default function StaffInventoryPage() {
 
   const loadLedger = useCallback(async () => {
     if (!token) return;
-    const res = await apiRequest<{ ingredients: IngredientView[]; menuServings: MenuServingRow[]; events: InventoryEvent[] }>(
-      "/api/v1/staff/inventory",
-      { token }
-    );
+    const res = await apiRequest<{
+      ingredients: IngredientView[];
+      menuServings: MenuServingRow[];
+      events: InventoryEvent[];
+    }>("/api/v1/staff/inventory", { token });
     setIngredients(res.ingredients);
     setMenuServings(res.menuServings);
     setEvents(res.events);
@@ -86,44 +90,66 @@ export default function StaffInventoryPage() {
     }
   };
 
-  const filteredIngredients = ingredients.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredIngredients = ingredients.filter(
+    (i) =>
+      i.name.toLowerCase().includes(search.toLowerCase()) &&
+      (catFilter === "all" || i.category === catFilter)
+  );
 
   return (
     <StaffGate>
-      <div className="min-h-screen bg-oat text-ink">
+      <div className="min-h-screen bg-cream text-espresso">
         <Navbar variant="staff" />
         <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-espresso/10 pb-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-caramel">Deterministic Base-Unit Ledger</p>
-              <h1 className="font-display mt-1 text-4xl font-semibold">Ingredient Inventory</h1>
-              <p className="text-sm text-ink/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-caramel">
+                Deterministic Base-Unit Ledger
+              </p>
+              <h1 className="font-display mt-1 text-4xl font-semibold sm:text-5xl">Ingredient Inventory</h1>
+              <p className="mt-1 text-sm text-roast/75">
                 Available = On-Hand − Reserved. Optimistic locking + atomic Firestore transactions prevent overselling.
               </p>
             </div>
             <div className="relative w-full sm:w-72">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/45" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-roast/45" />
               <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filter 26 ingredients..."
-                className="w-full rounded-full border border-ink/15 bg-porcelain py-2 pl-10 pr-4 text-sm"
+                className="w-full rounded-full border border-espresso/15 bg-porcelain py-2.5 pl-10 pr-4 text-sm focus:border-caramel focus:outline-none"
               />
             </div>
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            {ING_CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCatFilter(c)}
+                className={`rounded-full px-3.5 py-1 text-xs font-semibold capitalize transition ${
+                  catFilter === c
+                    ? "bg-espresso text-cream"
+                    : "border border-espresso/15 bg-porcelain text-espresso hover:border-caramel"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
           {notice && (
-            <div className="flex items-center gap-2 rounded-xl border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+            <div className="flex items-center gap-2 rounded-xl border border-sage/45 bg-sage/15 px-4 py-3 text-sm text-success">
               <CheckCircle2 className="h-4 w-4" /> {notice}
             </div>
           )}
           {error && <p className="rounded-xl bg-coral/10 p-3 text-sm text-coral">{error}</p>}
 
-          {/* Ingredient Table */}
           <section className="ceramic-card overflow-x-auto rounded-3xl p-4">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-ink/10 text-xs uppercase text-ink/60">
+              <thead className="border-b border-espresso/10 text-xs uppercase text-roast/65">
                 <tr>
                   <th className="p-3">Ingredient</th>
                   <th className="p-3">On Hand</th>
@@ -135,68 +161,94 @@ export default function StaffInventoryPage() {
                   {isManager && <th className="p-3">Manager Restock</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink/10">
-                {filteredIngredients.map((ing) => (
-                  <tr key={ing.id}>
-                    <td className="p-3 font-semibold">
-                      {ing.name}
-                      <span className="block text-[10px] font-normal uppercase text-ink/50">{ing.category} · v{ing.version}</span>
-                    </td>
-                    <td className="font-mono-num p-3">{ing.onHand}{ing.unit}</td>
-                    <td className="font-mono-num p-3 text-caramel">{ing.reserved}{ing.unit}</td>
-                    <td className="font-mono-num p-3 font-bold">{ing.available}{ing.unit}</td>
-                    <td className="font-mono-num p-3 text-ink/65">{ing.lowThreshold}{ing.unit}</td>
-                    <td className="p-3">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                          ing.status === "healthy"
-                            ? "bg-success/15 text-success"
-                            : ing.status === "low"
-                            ? "bg-caramel/25 text-roast"
-                            : "bg-coral/20 text-coral"
-                        }`}
-                      >
-                        {ing.status}
-                      </span>
-                    </td>
-                    <td className="max-w-xs truncate p-3 text-xs text-ink/70">{ing.affectedDrinks.join(", ")}</td>
-                    {isManager && (
+              <tbody className="divide-y divide-espresso/10">
+                {filteredIngredients.map((ing) => {
+                  const pct = Math.min(100, Math.round((ing.available / Math.max(1, ing.lowThreshold * 4)) * 100));
+                  return (
+                    <tr key={ing.id} className="hover:bg-cream/50">
+                      <td className="p-3 font-semibold text-espresso">
+                        {ing.name}
+                        <span className="block text-[10px] font-normal uppercase text-roast/60">
+                          {ing.category} · v{ing.version}
+                        </span>
+                      </td>
+                      <td className="font-mono-num p-3">
+                        {ing.onHand}
+                        {ing.unit}
+                      </td>
+                      <td className="font-mono-num p-3 text-caramel">
+                        {ing.reserved}
+                        {ing.unit}
+                      </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            aria-label={`Restock quantity for ${ing.name}`}
-                            value={restockDelta[ing.id] ?? (ing.unit === "each" ? 10 : ing.unit === "g" ? 500 : 1000)}
-                            onChange={(e) => setRestockDelta((p) => ({ ...p, [ing.id]: Number(e.target.value) }))}
-                            className="font-mono-num w-20 rounded-lg border border-ink/20 bg-white px-2 py-1 text-xs"
+                        <div className="font-mono-num font-bold">
+                          {ing.available}
+                          {ing.unit}
+                        </div>
+                        <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-milk/60">
+                          <div
+                            className={`h-full rounded-full ${
+                              ing.status === "healthy" ? "bg-sage" : ing.status === "low" ? "bg-caramel" : "bg-coral"
+                            }`}
+                            style={{ width: `${Math.max(8, pct)}%` }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => handleAdjust(ing)}
-                            className="inline-flex items-center gap-1 rounded-full bg-espresso px-3 py-1 text-xs font-semibold text-porcelain hover:bg-roast"
-                          >
-                            <PlusCircle className="h-3.5 w-3.5" /> Apply
-                          </button>
                         </div>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="font-mono-num p-3 text-roast/65">
+                        {ing.lowThreshold}
+                        {ing.unit}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                            ing.status === "healthy"
+                              ? "bg-sage/20 text-success"
+                              : ing.status === "low"
+                              ? "bg-caramel/25 text-roast"
+                              : "bg-coral/20 text-coral"
+                          }`}
+                        >
+                          {ing.status}
+                        </span>
+                      </td>
+                      <td className="max-w-xs truncate p-3 text-xs text-roast/75">{ing.affectedDrinks.join(", ")}</td>
+                      {isManager && (
+                        <td className="p-3">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              aria-label={`Restock quantity for ${ing.name}`}
+                              value={restockDelta[ing.id] ?? (ing.unit === "each" ? 10 : ing.unit === "g" ? 500 : 1000)}
+                              onChange={(e) => setRestockDelta((p) => ({ ...p, [ing.id]: Number(e.target.value) }))}
+                              className="font-mono-num w-20 rounded-lg border border-espresso/20 bg-white px-2 py-1 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdjust(ing)}
+                              className="inline-flex items-center gap-1 rounded-full bg-espresso px-3 py-1 text-xs font-semibold text-cream hover:bg-roast"
+                            >
+                              <PlusCircle className="h-3.5 w-3.5" /> Apply
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </section>
 
-          {/* Recipe Impact + Audit Events */}
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="ceramic-card rounded-3xl p-5">
               <h2 className="font-display text-2xl font-semibold">Recipe Servings Impact</h2>
-              <p className="text-xs text-ink/65">Live servings computable per drink; managers can temporarily pause any item.</p>
+              <p className="text-xs text-roast/70">Live servings computable per drink; managers can temporarily pause any item.</p>
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
                 {menuServings.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between gap-2 rounded-xl bg-oat/55 px-3.5 py-2.5 text-xs">
+                  <div key={m.id} className="flex items-center justify-between gap-2 rounded-xl bg-cream/70 px-3.5 py-2.5 text-xs">
                     <div>
-                      <p className="font-semibold">{m.name}</p>
-                      <p className="text-ink/60">
+                      <p className="font-semibold text-espresso">{m.name}</p>
+                      <p className="text-roast/65">
                         {m.availableServings} servings possible · limited by {m.limitingIngredientName || "stock"}
                       </p>
                     </div>
@@ -218,18 +270,32 @@ export default function StaffInventoryPage() {
 
             <section className="ceramic-card rounded-3xl p-5">
               <h2 className="font-display text-2xl font-semibold">Inventory Transaction Journal</h2>
-              <p className="text-xs text-ink/65">Append-only audit log of every reservation, consumption, release, and restock.</p>
+              <p className="text-xs text-roast/70">
+                Append-only audit log of every reservation, consumption, release, and restock.
+              </p>
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1 text-xs">
                 {events.map((ev) => (
-                  <div key={ev.id} className="flex items-center justify-between rounded-xl border border-ink/10 px-3 py-2">
+                  <div key={ev.id} className="flex items-center justify-between rounded-xl border border-espresso/10 px-3 py-2">
                     <div>
-                      <span className="font-semibold">{ev.ingredientName}</span>
-                      <span className="ml-1.5 rounded bg-oat px-1.5 py-0.5 text-[10px] font-bold uppercase text-roast">{ev.eventType}</span>
-                      <p className="text-[11px] text-ink/60">{ev.reason}</p>
+                      <span className="font-semibold text-espresso">{ev.ingredientName}</span>
+                      <span className="ml-1.5 rounded bg-cream px-1.5 py-0.5 text-[10px] font-bold uppercase text-roast">
+                        {ev.eventType}
+                      </span>
+                      <p className="text-[11px] text-roast/65">{ev.reason}</p>
                     </div>
                     <div className="font-mono-num text-right font-semibold">
-                      {ev.deltaOnHand !== 0 && <div>OnHand {ev.deltaOnHand > 0 ? "+" : ""}{ev.deltaOnHand}</div>}
-                      {ev.deltaReserved !== 0 && <div className="text-caramel">Res {ev.deltaReserved > 0 ? "+" : ""}{ev.deltaReserved}</div>}
+                      {ev.deltaOnHand !== 0 && (
+                        <div>
+                          OnHand {ev.deltaOnHand > 0 ? "+" : ""}
+                          {ev.deltaOnHand}
+                        </div>
+                      )}
+                      {ev.deltaReserved !== 0 && (
+                        <div className="text-caramel">
+                          Res {ev.deltaReserved > 0 ? "+" : ""}
+                          {ev.deltaReserved}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
