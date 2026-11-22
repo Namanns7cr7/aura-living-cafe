@@ -1,6 +1,8 @@
 # AURA — Cost & Billing Preflight Report
 
-**Status:** Pre-deployment (NO billable cloud resources created yet)  
+**Status:** DEPLOYED & LIVE-VERIFIED (`ENABLE_LIVE_GEMINI=false` — rule-based mode, \$0.00 AI spend)  
+**Deployed Project:** `aura-living-cafe-492817` (Project `#214091459755`, linked to `01D3D1-37E942-4640E0` — `GDP Event Credit: coffee popup Delhi`)  
+**Budget Alert Configured:** Budget ID `1a63e8f1-99a7-4da5-bcec-a4930cdbf5a6` at **\$2.00 (40%)**, **\$4.00 (80%)**, and **\$5.00 (100%)** (alerts only, not hard spend caps)  
 **Target Budget:** \$5.00 USD initial spend ceiling  
 **Verified Google Account:** `namansharma2664@gmail.com` (verified via `gcloud auth list` and `firebase login:list`)  
 

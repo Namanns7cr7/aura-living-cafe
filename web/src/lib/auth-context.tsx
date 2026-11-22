@@ -37,14 +37,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (active) setLoading(false);
           return;
         }
+        // Optimistically restore immediately so navigation/refresh never flashes logged-out
+        if (active) {
+          setToken(saved.token);
+          setUser(saved.user);
+          setLoading(false);
+        }
         const res = await apiRequest<{ authenticated: boolean; user: AuthUser | null }>("/api/v1/public/me", {
           token: saved.token,
         });
         if (active) {
           if (res.authenticated && res.user) {
-            setToken(saved.token);
             setUser(res.user);
           } else {
+            setToken(null);
+            setUser(null);
             localStorage.removeItem(STORAGE_KEY);
           }
         }

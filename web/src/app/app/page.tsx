@@ -140,10 +140,10 @@ export default function CustomerHomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-oat text-ink">
+    <div className="min-h-screen overflow-x-hidden bg-oat text-ink">
       <Navbar variant="app" />
 
-      <main className="mx-auto max-w-[1440px] space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-[1440px] space-y-8 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8">
         {/* Promo banner if Manager approved an inventory-aware substitute banner */}
         {overview?.promoBanner && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-caramel/40 bg-espresso px-5 py-3 text-sm text-porcelain">
@@ -385,7 +385,7 @@ export default function CustomerHomePage() {
               )}
 
               {/* Paired Seat + Explicit Human Confirmation Card */}
-              {(plan.seat || plan.approvalPreview) && (
+              {(plan.seat || plan.approvalPreview || plan.proposedCart.length > 0) && (
                 <div className="flex flex-col justify-between gap-4 rounded-2xl border border-caramel/40 bg-porcelain p-4 sm:flex-row sm:items-center">
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-1.5 font-semibold text-espresso">
