@@ -1,0 +1,33 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*service-account*.json
+*serviceAccount*.json
+*credentials*.json
+firebase-adminsdk-*.json
+
+# Python
+.venv/
+api/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js / Playwright
+node_modules/
+web/node_modules/
+web/.next/
+web/out/
+web/test-results/
+web/playwright-report/
+
+# Firebase / Emulator / OS
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.DS_Store
+Thumbs.db

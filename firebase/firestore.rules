@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Café-scoped role claims: prevents staff of one café from reading another café
+    function isStaffForCafe(cafeId) {
+      return isSignedIn()
+        && request.auth.token.cafeId == cafeId
+        && (request.auth.token.role == 'barista' || request.auth.token.role == 'manager');
+    }
+
+    function isManagerForCafe(cafeId) {
+      return isSignedIn()
+        && request.auth.token.cafeId == cafeId
+        && request.auth.token.role == 'manager';
+    }
+
+    match /cafes/{cafeId} {
+      // Public read-only catalog & sanitized seat status
+      match /menuItems/{itemId} {
+        allow read: if true;
+        allow write: if false; // Server-only via Cloud Run backend
+      }
+
+      match /tables/{tableId} {
+        allow read: if true;
+        allow write: if false; // Atomic seat transactions via Cloud Run backend
+      }
+
+      // Ingredient stock ledger is strictly café-scoped staff readable; server-only writable
+      match /ingredients/{ingredientId} {
+        allow read: if isStaffForCafe(cafeId);
+        allow write: if false;
+      }
+
+      // Orders readable only by owner or café-scoped staff; server-only writable
+      match /orders/{orderId} {
+        allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isStaffForCafe(cafeId));
+        allow write: if false;
+      }
+
+      match /orderEvents/{eventId} {
+        allow read: if isStaffForCafe(cafeId);
+        allow write: if false;
+      }
+
+      match /inventoryEvents/{eventId} {
+        allow read: if isStaffForCafe(cafeId);
+        allow write: if false;
+      }
+
+      match /reservations/{reservationId} {
+        allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isStaffForCafe(cafeId));
+        allow write: if false;
+      }
+
+      // Public opt-in session metadata ONLY (no member UIDs, no pending requests, no private meeting notes)
+      match /sessions/{sessionId} {
+        allow read: if resource.data.visibility == 'public'
+          || isStaffForCafe(cafeId)
+          || (isSignedIn() && resource.data.hostId == request.auth.uid);
+        allow write: if false;
+
+        // Private subcollection holding approvedMemberIds, pendingRequests, and host meetingNote
+        match /private/{docId} {
+          allow read: if isSignedIn() && (
+            resource.data.hostId == request.auth.uid
+            || request.auth.uid in resource.data.approvedMemberIds
+            || isManagerForCafe(cafeId)
+          );
+          allow write: if false;
+        }
+      }
+
+      match /operationalRecommendations/{recId} {
+        allow read: if isStaffForCafe(cafeId);
+        allow write: if false;
+      }
+
+      match /demoState/{docId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      match /idempotencyKeys/{keyId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
