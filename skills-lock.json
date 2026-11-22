@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-platform-eval-flywheel": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/agent-platform-eval-flywheel/SKILL.md",
+      "computedHash": "7b8f63f53e428ee91e011da021ce8892b6b03c3e96a350c09b5b62f4363531e1"
+    },
+    "cloud-logging-configuration-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/cloud-logging-configuration-basics/SKILL.md",
+      "computedHash": "84338104fa233935463e54da5aa87fd836b9d6cf03d00ee7ec01d766cdcabdd7"
+    },
+    "cloud-run-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/cloud-run-basics/SKILL.md",
+      "computedHash": "d8b8fa8d38255d5f377d0c590d3ea0a420437eeb6cbd6f2ffe80050619bf3e01"
+    },
+    "firebase-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/firebase-basics/SKILL.md",
+      "computedHash": "0c216bd5669e0ad5d3b47a0e6b6d94352a87442979d9ca596d9143f551b740f9"
+    },
+    "gcloud": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/gcloud/SKILL.md",
+      "computedHash": "e5d53270484421fc72895ea08c13eb7d010ee17a717336e5bd15c4e29268d486"
+    },
+    "gemini-api": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/gemini-api/SKILL.md",
+      "computedHash": "45254fabf15486304870cf47d9b8d1acb93a36da5c1f01dc119efa318e267e7e"
+    },
+    "google-cloud-solution-build-deploy-agents": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/google-cloud-solution-build-deploy-agents/SKILL.md",
+      "computedHash": "f53ec737fd03a30707b32c721df1d672aaf47e6523e5b370c2db87634705f7f9"
+    },
+    "google-cloud-waf-cost-optimization": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/google-cloud-waf-cost-optimization/SKILL.md",
+      "computedHash": "2631f2b1028a707086b567cbcfb8f4cafa479b63430594ca2eb9695a34477deb"
+    },
+    "iam-helper-for-policy-management": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/iam-helper-for-policy-management/SKILL.md",
+      "computedHash": "2f8d898e10b1762233f09e4939592ee8eff4b18a6e0a1e67ad95fd098d38ce7b"
+    }
+  }
+}

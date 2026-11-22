@@ -75,6 +75,11 @@ SCENARIOS: list[dict[str, Any]] = [
     {"id": "E26", "name": "Ops agent rush hour queue alert proposal", "kind": "ops", "scenario": "rush", "question": "How is the rush affecting prep load?", "expect_rec_type": "queue_alert", "expect_manager_approval": True},
     {"id": "E27", "name": "Ops agent healthy baseline summary + demand leaders", "kind": "ops", "scenario": "calm", "question": "Summarize top drinks and stock health.", "expect_demand_leaders": True, "expect_manager_approval": True},
     {"id": "E28", "name": "Graceful fallback source labeling when Gemini unavailable", "kind": "customer", "message": "Cold brew under ₹200 please.", "expect_source": "deterministic"},
+    # Round-2 Critical Allergy & Regex Boundary Regressions
+    {"id": "E29", "name": "CRITICAL: Allergic to almonds must NEVER return Iced Almond Cloud Latte", "kind": "customer", "message": "I'm allergic to almonds, what cold coffee do you recommend?", "expect_exclude_allergen": "tree_nuts", "expect_forbid_id": "iced-almond-americano", "expect_min_recs": 1},
+    {"id": "E30", "name": "Cashew allergy maps to tree_nuts exclusion", "kind": "customer", "message": "I have a cashew allergy, looking for something cold under ₹250.", "expect_exclude_allergen": "tree_nuts", "expect_max_price": 25000, "expect_min_recs": 1},
+    {"id": "E31", "name": "No milk maps to dairy exclusion", "kind": "customer", "message": "Give me a cold coffee with no milk under ₹240.", "expect_exclude_allergen": "dairy", "expect_dairy_free": True, "expect_max_price": 24000, "expect_min_recs": 1},
+    {"id": "E32", "name": "Within 15 minutes is time, not budget; no more than 200 rupees is budget", "kind": "customer", "message": "Cold coffee, no more than 200 rupees, ready within 15 minutes.", "expect_max_price": 20000, "expect_ready_within": 15, "expect_min_recs": 1},
 ]
 
 
@@ -156,9 +161,18 @@ async def run_evaluations(use_live_gemini: bool = False) -> dict[str, Any]:
                         errs.append(f"{r.name} contains dairy")
             if sc.get("expect_exclude_allergen"):
                 ex = sc["expect_exclude_allergen"]
-                for r in res.recommendations:
+                for r in res.recommendations + res.alternativeSuggestions:
                     if ex in r.allergens:
                         errs.append(f"{r.name} contains banned allergen {ex}")
+            if sc.get("expect_forbid_id"):
+                for r in res.recommendations + res.alternativeSuggestions:
+                    if r.menuItemId == sc["expect_forbid_id"]:
+                        errs.append(f"Forbidden item {r.menuItemId} returned despite allergy!")
+            if sc.get("expect_ready_within"):
+                if res.constraints.get("readyWithinMinutes") != sc["expect_ready_within"]:
+                    errs.append(f"Expected readyWithinMinutes={sc['expect_ready_within']}, got {res.constraints.get('readyWithinMinutes')}")
+                if sc.get("expect_max_price") and res.constraints.get("maxPricePaise") != sc["expect_max_price"]:
+                    errs.append(f"Expected maxPricePaise={sc['expect_max_price']}, got {res.constraints.get('maxPricePaise')}")
             if sc.get("expect_no_oat_in_recs"):
                 for r in res.recommendations:
                     if "oats" in r.allergens:

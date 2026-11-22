@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --espresso: #17120f;
+  --roast: #261a15;
+  --caramel: #c88b50;
+  --oat: #f5efe4;
+  --porcelain: #fff9f1;
+  --sage: #8b9b7e;
+  --coral: #d86f51;
+  --success: #4d9276;
+  --ink: #281d18;
+  --font-dm-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-cormorant: "Cormorant Garamond", Georgia, serif;
+  --font-space-grotesk: "Space Grotesk", ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--oat);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  font-family: var(--font-dm-sans), system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background-color: var(--oat);
+  overflow-x: hidden;
+}
+
+.font-display {
+  font-family: var(--font-cormorant), Georgia, serif;
+}
+
+.font-mono-num {
+  font-family: var(--font-space-grotesk), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ceramic matte card surface for functional app views */
+.ceramic-card {
+  background: var(--porcelain);
+  border: 1px solid rgba(40, 29, 24, 0.1);
+  box-shadow: 0 8px 28px -12px rgba(23, 18, 15, 0.1), 0 1px 2px rgba(23, 18, 15, 0.05);
+}
+
+/* Dark espresso glass overlay reserved strictly for dark hero surfaces */
+.espresso-glass {
+  background: rgba(23, 18, 15, 0.72);
+  border: 1px solid rgba(200, 139, 80, 0.22);
+  backdrop-filter: blur(12px);
+}
+
+/* Accessible focus ring */
+*:focus-visible {
+  outline: 2px solid #c88b50;
+  outline-offset: 2px;
+}

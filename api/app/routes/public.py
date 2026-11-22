@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/v1/public", tags=["public"])
 
 class DemoLoginRequest(BaseModel):
     persona: str
+    staffPasscode: str | None = None
 
 
 @router.get("/menu")
@@ -198,7 +199,12 @@ def demo_login(
     body: DemoLoginRequest,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    token, ctx = issue_demo_token(body.persona, settings)
+    token, ctx = issue_demo_token(
+        body.persona,
+        settings,
+        staff_passcode=body.staffPasscode,
+        require_staff_passcode=True,
+    )
     return {
         "token": token,
         "user": {
@@ -210,6 +216,7 @@ def demo_login(
             "isDemo": ctx.is_demo,
         },
         "availablePersonas": list(DEMO_PERSONAS.keys()),
+        "staffPasscodeRequired": True,
     }
 
 

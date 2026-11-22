@@ -7,6 +7,7 @@ from typing import Any
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter, Query
 
 from app.services.eta import estimate_pickup_eta
 from app.services.inventory import aggregate_cart_requirements, compute_available_units
@@ -323,9 +324,13 @@ class FirestoreCafeStore(CafeStore):
                 if not tbl_snap.exists:
                     raise DomainNotFoundError(f"Table '{table_id}' not found")
                 tbl_doc = tbl_snap.to_dict()
+                expired_res_ref = None
                 if tbl_doc["status"] == "reserved":
                     exp = _parse_iso(tbl_doc.get("reservationExpiresAt"))
                     if exp and exp <= now_dt:
+                        old_res_id = tbl_doc.get("reservationId")
+                        if old_res_id:
+                            expired_res_ref = self._col(cafe_id, "reservations").document(old_res_id)
                         tbl_doc["status"] = "free"
                         tbl_doc["reservationId"] = None
                         tbl_doc["reservedByUserId"] = None
@@ -408,6 +413,8 @@ class FirestoreCafeStore(CafeStore):
                 )
 
             if tbl_ref and tbl_doc and res_doc:
+                if expired_res_ref is not None:
+                    transaction.set(expired_res_ref, {"state": "expired"}, merge=True)
                 transaction.set(tbl_ref, tbl_doc)
                 transaction.set(self._col(cafe_id, "reservations").document(res_doc["id"]), res_doc)
 
@@ -582,26 +589,33 @@ class FirestoreCafeStore(CafeStore):
         snap = self._col(cafe_id, "orders").document(order_id).get()
         return snap.to_dict() if snap.exists else None
 
-    def list_orders(self, cafe_id: str, user_id: str | None = None) -> list[dict[str, Any]]:
-        docs = [d.to_dict() for d in self._col(cafe_id, "orders").stream() if d.exists]
+    def list_orders(self, cafe_id: str, user_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        col = self._col(cafe_id, "orders")
         if user_id is not None:
-            docs = [d for d in docs if d.get("userId") == user_id]
-        docs.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-        return docs
+            query = col.where(filter=FieldFilter("userId", "==", user_id)).limit(limit)
+            docs = [d.to_dict() for d in query.stream() if d.exists]
+            docs.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+            return docs
+        query = col.order_by("createdAt", direction=Query.DESCENDING).limit(limit)
+        return [d.to_dict() for d in query.stream() if d.exists]
 
-    def list_order_events(self, cafe_id: str, order_id: str | None = None) -> list[dict[str, Any]]:
-        docs = [d.to_dict() for d in self._col(cafe_id, "orderEvents").stream() if d.exists]
+    def list_order_events(self, cafe_id: str, order_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        col = self._col(cafe_id, "orderEvents")
         if order_id is not None:
-            docs = [d for d in docs if d.get("orderId") == order_id]
-        docs.sort(key=lambda x: x.get("at", ""), reverse=True)
-        return docs
+            query = col.where(filter=FieldFilter("orderId", "==", order_id)).limit(limit)
+            docs = [d.to_dict() for d in query.stream() if d.exists]
+            docs.sort(key=lambda x: x.get("at", ""), reverse=True)
+            return docs
+        query = col.order_by("at", direction=Query.DESCENDING).limit(limit)
+        return [d.to_dict() for d in query.stream() if d.exists]
 
     def list_inventory_events(self, cafe_id: str, limit: int = 50) -> list[dict[str, Any]]:
-        docs = [d.to_dict() for d in self._col(cafe_id, "inventoryEvents").stream() if d.exists]
-        docs.sort(key=lambda x: x.get("at", ""), reverse=True)
-        return docs[:limit]
+        col = self._col(cafe_id, "inventoryEvents")
+        query = col.order_by("at", direction=Query.DESCENDING).limit(limit)
+        return [d.to_dict() for d in query.stream() if d.exists]
 
     def list_tables(self, cafe_id: str) -> list[dict[str, Any]]:
+        """Read-only table listing: computes lazy expiry purely in memory without mutating Firestore."""
         now = _now()
         result = []
         for snap in self._col(cafe_id, "tables").stream():
@@ -615,8 +629,6 @@ class FirestoreCafeStore(CafeStore):
                     tbl["reservationId"] = None
                     tbl["reservedByUserId"] = None
                     tbl["reservationExpiresAt"] = None
-                    tbl["updatedAt"] = _iso(now)
-                    snap.reference.set(tbl)
             result.append(tbl)
         return result
 
@@ -636,9 +648,13 @@ class FirestoreCafeStore(CafeStore):
                 raise DomainNotFoundError(f"Table '{table_id}' not found")
             tbl = snap.to_dict()
             now_dt = _now()
+            expired_res_ref = None
             if tbl["status"] == "reserved":
                 exp = _parse_iso(tbl.get("reservationExpiresAt"))
                 if exp and exp <= now_dt:
+                    old_res_id = tbl.get("reservationId")
+                    if old_res_id:
+                        expired_res_ref = self._col(cafe_id, "reservations").document(old_res_id)
                     tbl["status"] = "free"
                     tbl["reservationId"] = None
                     tbl["reservedByUserId"] = None
@@ -662,6 +678,8 @@ class FirestoreCafeStore(CafeStore):
             tbl["reservedByUserId"] = user_id
             tbl["reservationExpiresAt"] = exp_iso
             tbl["updatedAt"] = now_iso
+            if expired_res_ref is not None:
+                transaction.set(expired_res_ref, {"state": "expired"}, merge=True)
             transaction.set(tbl_ref, tbl)
             transaction.set(self._col(cafe_id, "reservations").document(res_id), res_doc)
             return tbl, res_doc
@@ -670,21 +688,30 @@ class FirestoreCafeStore(CafeStore):
 
     def release_table_tx(self, cafe_id: str, table_id: str, user_id: str, is_staff: bool = False) -> dict[str, Any]:
         tbl_ref = self._col(cafe_id, "tables").document(table_id)
-        snap = tbl_ref.get()
-        if not snap.exists:
-            raise DomainNotFoundError(f"Table '{table_id}' not found")
-        tbl = snap.to_dict()
-        if tbl["status"] == "free":
+
+        @firestore.transactional
+        def _txn(transaction: firestore.Transaction):
+            snap = tbl_ref.get(transaction=transaction)
+            if not snap.exists:
+                raise DomainNotFoundError(f"Table '{table_id}' not found")
+            tbl = snap.to_dict()
+            if tbl["status"] == "free":
+                return tbl
+            if not is_staff and tbl.get("reservedByUserId") != user_id:
+                raise DomainConflictError("Only reservation holder or staff can release this seat.", code="forbidden")
+            old_res_id = tbl.get("reservationId")
+            tbl["status"] = "free"
+            tbl["reservationId"] = None
+            tbl["reservedByUserId"] = None
+            tbl["reservationExpiresAt"] = None
+            tbl["updatedAt"] = _iso()
+            if old_res_id:
+                res_ref = self._col(cafe_id, "reservations").document(old_res_id)
+                transaction.set(res_ref, {"state": "cancelled"}, merge=True)
+            transaction.set(tbl_ref, tbl)
             return tbl
-        if not is_staff and tbl.get("reservedByUserId") != user_id:
-            raise DomainConflictError("Only reservation holder or staff can release this seat.", code="forbidden")
-        tbl["status"] = "free"
-        tbl["reservationId"] = None
-        tbl["reservedByUserId"] = None
-        tbl["reservationExpiresAt"] = None
-        tbl["updatedAt"] = _iso()
-        tbl_ref.set(tbl)
-        return tbl
+
+        return _txn(self._db.transaction())
 
     # --- Sessions split across public doc + private/members subcollection ---
 

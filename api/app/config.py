@@ -31,10 +31,13 @@ class Settings(BaseSettings):
     aura_store_mode: str = "memory"  # "memory" or "firestore"
     demo_cafe_id: str = "demo-cafe"
     allow_demo_auth: bool = False    # Secure default: OFF unless explicitly enabled for demo-cafe
+    demo_staff_passcode: str = ""    # Required to issue barista/manager demo tokens (Secret Manager in prod)
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Cost & Security Safeguards
     daily_ai_budget_requests: int = 200
+    per_user_daily_ai_limit: int = 30
+    per_guest_ip_daily_limit: int = 10
     per_user_ai_rpm: int = 10
     approval_token_secret: str = "local-dev-ephemeral-secret-change-in-prod"
     approval_token_ttl_seconds: int = 600

@@ -53,7 +53,12 @@ DEMO_PERSONAS: dict[str, dict[str, str]] = {
 }
 
 
-def issue_demo_token(persona_key: str, settings: Settings | None = None) -> tuple[str, UserContext]:
+def issue_demo_token(
+    persona_key: str,
+    settings: Settings | None = None,
+    staff_passcode: str | None = None,
+    require_staff_passcode: bool = False,
+) -> tuple[str, UserContext]:
     cfg = settings or get_settings()
     if not cfg.allow_demo_auth:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Demo auth is disabled")
@@ -65,6 +70,19 @@ def issue_demo_token(persona_key: str, settings: Settings | None = None) -> tupl
     if persona_key not in DEMO_PERSONAS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown demo persona")
     p = DEMO_PERSONAS[persona_key]
+    if require_staff_passcode and p["role"] in ("barista", "manager"):
+        expected = (cfg.demo_staff_passcode or "").strip()
+        provided = (staff_passcode or "").strip()
+        if not expected:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Staff demo login is disabled. Sign in with a Firebase staff account or configure DEMO_STAFF_PASSCODE.",
+            )
+        if not provided or not hmac.compare_digest(provided, expected):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid staff passcode for barista/manager demo persona.",
+            )
     exp = int(time.time()) + 86400
     payload = f"{persona_key}:{exp}:demo-cafe"
     sig = hmac.new(cfg.approval_token_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()[:24]

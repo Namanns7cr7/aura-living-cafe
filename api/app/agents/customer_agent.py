@@ -6,7 +6,9 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
 
 from app.agents.tools import build_approval_preview, build_customer_tools
 from app.auth import UserContext
@@ -34,6 +36,79 @@ INJECTION_PATTERNS = [
     r"another\s+customer'?s\s+order|user\s+b'?s\s+order|seed-ord-\d+",
 ]
 
+# Authoritative allergen synonym map (used by BOTH structured LLM clamp and regex fallback)
+ALLERGEN_SYNONYMS: dict[str, str] = {
+    "nut": "tree_nuts",
+    "nuts": "tree_nuts",
+    "tree nut": "tree_nuts",
+    "tree nuts": "tree_nuts",
+    "tree_nuts": "tree_nuts",
+    "almond": "tree_nuts",
+    "almonds": "tree_nuts",
+    "cashew": "tree_nuts",
+    "cashews": "tree_nuts",
+    "hazelnut": "tree_nuts",
+    "hazelnuts": "tree_nuts",
+    "walnut": "tree_nuts",
+    "walnuts": "tree_nuts",
+    "pistachio": "tree_nuts",
+    "pistachios": "tree_nuts",
+    "peanut": "tree_nuts",
+    "peanuts": "tree_nuts",
+    "dairy": "dairy",
+    "milk": "dairy",
+    "lactose": "dairy",
+    "cream": "dairy",
+    "butter": "dairy",
+    "oat": "oats",
+    "oats": "oats",
+    "gluten": "gluten",
+    "wheat": "gluten",
+    "coconut": "coconut",
+    "sesame": "sesame",
+}
+
+ALLERGEN_TO_KEYWORDS: dict[str, set[str]] = {
+    "tree_nuts": {"almond", "cashew", "hazelnut", "walnut", "pistachio", "nut"},
+    "dairy": {"milk", "dairy", "cream", "butter", "cappuccino", "condensed"},
+    "oats": {"oat", "oats"},
+    "gluten": {"croissant", "danish", "loaf", "sourdough", "gluten"},
+    "coconut": {"coconut"},
+    "sesame": {"sesame"},
+}
+
+POSITIVE_KEYWORDS = [
+    "oat",
+    "almond",
+    "matcha",
+    "cold brew",
+    "tonic",
+    "espresso",
+    "chai",
+    "croissant",
+    "coconut",
+    "decaf",
+    "hibiscus",
+    "v60",
+]
+
+
+class StructuredIntentOutput(BaseModel):
+    """Strict Pydantic schema for Gemini structured constraint extraction."""
+
+    intent: Literal["focus", "grab_and_go", "catch_up", "explore"] = "explore"
+    maxPriceRupees: int | None = Field(default=None, ge=50, le=5000)
+    readyWithinMinutes: int | None = Field(default=None, ge=3, le=120)
+    temperature: Literal["hot", "cold", "ambient"] | None = None
+    notTooSweet: bool = False
+    dietaryTags: list[str] = Field(default_factory=list)
+    excludeAllergens: list[str] = Field(default_factory=list)
+    caffeineFree: bool = False
+    needsSeat: bool = False
+    needsOutlet: bool = False
+    quietPreferred: bool = False
+    preferredKeywords: list[str] = Field(default_factory=list)
+
 
 def detect_policy_violation(message: str) -> str | None:
     lower = message.lower()
@@ -53,90 +128,149 @@ def detect_policy_violation(message: str) -> str | None:
     return None
 
 
-def parse_constraints_from_text(req: VisitPlanRequest) -> dict[str, Any]:
-    """Deterministic NLP parser extracting budget, temperature, sweetness, dietary, allergens, time, and seat intent."""
-    text = req.message.lower()
+def _extract_negated_allergens(text: str) -> tuple[set[str], set[str], str]:
+    """
+    Detect allergy and negation phrases BEFORE any positive keyword matching!
+    Returns (excluded_allergens, negated_raw_terms, scrubbed_text_without_negated_spans).
+    """
+    excluded: set[str] = set()
+    negated_terms: set[str] = set()
+    scrubbed = text
 
-    # Budget extraction (e.g. "under ₹250", "under 250", "below rs 200", "budget 180")
+    term_pattern = "|".join(sorted((re.escape(k) for k in ALLERGEN_SYNONYMS), key=len, reverse=True))
+    # Support lists like "allergic to almonds and cashews" or "no milk or nuts"
+    list_group = rf"({term_pattern})(?:\s*(?:,|and|or)\s*({term_pattern}))*"
+
+    negation_patterns = [
+        rf"\b(?:allergic\s+to|allergy\s+to|intolerant\s+to|can'?t\s+(?:have|eat|drink)|cannot\s+(?:have|eat|drink)|avoid(?:ing)?|without|no)\s+{list_group}\b",
+        rf"\b({term_pattern})[\s-]+(?:free|allergy|intolerant|intolerance)\b",
+    ]
+
+    for pat in negation_patterns:
+        for match in re.finditer(pat, text, flags=re.IGNORECASE):
+            span = match.group(0).lower()
+            for raw_term, canonical in ALLERGEN_SYNONYMS.items():
+                if re.search(rf"\b{re.escape(raw_term)}\b", span):
+                    excluded.add(canonical)
+                    negated_terms.add(raw_term)
+                    negated_terms.update(ALLERGEN_TO_KEYWORDS.get(canonical, set()))
+            # Scrub the negated span so downstream positive keyword detectors never match inside it
+            scrubbed = scrubbed.replace(match.group(0), " ")
+
+    return excluded, negated_terms, scrubbed
+
+
+def parse_constraints_from_text(req: VisitPlanRequest) -> dict[str, Any]:
+    """
+    Deterministic constraint parser with allergy/negation precedence and strict word boundaries.
+    Used both as standalone fallback and as deterministic safety overlay on LLM structured output.
+    """
+    raw_text = req.message.lower()
+
+    # 1. Allergy & negation extraction FIRST (critical safety invariant!)
+    neg_allergens, negated_terms, positive_text = _extract_negated_allergens(raw_text)
+
+    exclude_allergens = {ALLERGEN_SYNONYMS.get(a.lower().strip(), a.lower().strip()) for a in req.excludeAllergens}
+    exclude_allergens.update(neg_allergens)
+
+    # 2. Budget extraction — NEVER match "within N min"! Handle "under/below/no more than/not over N rupees"
     max_price_rupees = req.maxBudgetRupees
     if max_price_rupees is None:
-        m = re.search(r"(?:under|below|less\s+than|max|within|budget(?:\s+of)?)\s*(?:₹|rs\.?|inr)?\s*(\d{2,4})", text)
-        if m:
-            max_price_rupees = int(m.group(1))
+        budget_patterns = [
+            r"\b(?:under|below|less\s+than|no\s+more\s+than|not\s+over|at\s+most|max(?:imum)?|up\s+to|budget(?:\s+of)?)\s*(?:₹|rs\.?|inr)?\s*(\d{2,4})(?:\s*(?:₹|rs\.?|rupees|inr))?(?!\s*(?:min|mins|minute|minutes|hr|hrs|hour|hours|sec|secs|db))\b",
+            r"(?:₹|rs\.?|inr)\s*(\d{2,4})(?!\s*(?:min|mins|minute|minutes))",
+            r"\b(\d{2,4})\s*(?:rupees|rs\.?|inr)\b",
+        ]
+        for bp in budget_patterns:
+            m = re.search(bp, raw_text)
+            if m:
+                val = int(m.group(1))
+                if 30 <= val <= 5000:
+                    max_price_rupees = val
+                    break
     max_price_paise = max_price_rupees * 100 if max_price_rupees is not None else None
 
-    # Ready-within time extraction (e.g. "10 min", "15 minutes", "quick")
+    # 3. Ready-within time extraction
     ready_within = req.readyWithinMinutes
     if ready_within is None:
-        tm = re.search(r"(\d{1,2})\s*(?:min|mins|minute|minutes)", text)
+        tm = re.search(r"\b(\d{1,2})\s*(?:min|mins|minute|minutes)\b", raw_text)
         if tm:
             ready_within = int(tm.group(1))
-        elif any(w in text for w in ["quick", "hurry", "rush", "grab and go", "grab & go"]):
+        elif re.search(r"\b(?:quick|hurry|rush|grab\s+and\s+go|grab\s*&\s*go)\b", raw_text):
             ready_within = 10
 
-    # Temperature
+    # 4. Temperature (word-bounded)
     temperature = None
-    if any(w in text for w in ["cold", "iced", "chilled", "refreshing", "tonic", "cold brew"]):
+    if re.search(r"\b(?:cold|iced|chilled|refreshing|tonic|cold\s+brew)\b", positive_text):
         temperature = "cold"
-    elif any(w in text for w in ["hot", "warm", "steamed", "flat white", "cappuccino", "chai", "v60", "cortado"]):
+    elif re.search(r"\b(?:hot|warm|steamed|flat\s+white|cappuccino|chai|v60|cortado)\b", positive_text):
         temperature = "hot"
 
-    # Sweetness
-    not_too_sweet = any(
-        w in text for w in ["not too sweet", "not sweet", "unsweetened", "no sugar", "sugar-free", "sugar free", "less sweet", "low sugar"]
+    # 5. Sweetness
+    not_too_sweet = bool(
+        re.search(
+            r"\b(?:not\s+too\s+sweet|not\s+sweet|unsweetened|no\s+sugar|sugar[\s-]+free|less\s+sweet|low\s+sugar)\b",
+            raw_text,
+        )
     )
 
-    # Dietary & Allergens
-    dietary = set(t.lower() for t in req.dietaryTags)
-    exclude_allergens = set(a.lower() for a in req.excludeAllergens)
-
-    if any(w in text for w in ["dairy-free", "dairy free", "no dairy", "lactose", "vegan", "plant milk", "oat", "almond"]):
+    # 6. Dietary tags (NEVER add a milk/tag that was negated or allergen-excluded!)
+    dietary = {t.lower().strip() for t in req.dietaryTags if t.strip()}
+    if "dairy" in exclude_allergens or re.search(r"\b(?:vegan|plant\s+milk)\b", positive_text):
         dietary.add("dairy-free")
         exclude_allergens.add("dairy")
-    if "vegan" in text:
+    if re.search(r"\bvegan\b", positive_text):
         dietary.add("vegan")
-    if "oat" in text:
+    # Positive oat / almond preference ONLY if NOT excluded by allergy!
+    if "oats" not in exclude_allergens and re.search(r"\boat(?:s|\s+milk)?\b", positive_text):
         dietary.add("oat")
-    if any(w in text for w in ["nut allergy", "no nuts", "nut-free", "nut free", "allergic to nuts", "peanut"]):
-        exclude_allergens.add("tree_nuts")
-    if any(w in text for w in ["gluten-free", "gluten free", "no gluten", "celiac"]):
-        exclude_allergens.add("gluten")
-    if any(w in text for w in ["caffeine-free", "caffeine free", "no caffeine", "decaf"]):
-        caffeine_free = True
-    else:
-        caffeine_free = False
+        dietary.add("dairy-free")
+        exclude_allergens.add("dairy")
+    if "tree_nuts" not in exclude_allergens and re.search(r"\balmond(?:\s+milk)?\b", positive_text):
+        dietary.add("dairy-free")
+        exclude_allergens.add("dairy")
 
-    # Seat & Intent
-    social_signal = any(w in text for w in ["friend", "friends", "catch up", "chat", "meetup", "group", "social"])
-    needs_outlet = req.needsOutlet if req.needsOutlet is not None else any(
-        w in text for w in ["outlet", "socket", "plug", "charging", "charger", "laptop"]
+    caffeine_free = bool(re.search(r"\b(?:caffeine[\s-]+free|no\s+caffeine|decaf)\b", raw_text))
+
+    # 7. Seat & Intent (word-bounded, social beats generic "meeting friends")
+    social_signal = bool(re.search(r"\b(?:friend|friends|catch\s+up|chat|meetup|group|social)\b", raw_text))
+    needs_outlet = req.needsOutlet if req.needsOutlet is not None else bool(
+        re.search(r"\b(?:outlet|socket|plug|charging|charger|laptop)\b", raw_text)
     )
     quiet_preferred = req.quietPreferred if req.quietPreferred is not None else (
-        any(w in text for w in ["quiet", "focus", "study", "deep work", "call", "read", "reading"])
-        or ("meeting" in text and not social_signal)
+        bool(re.search(r"\b(?:quiet|focus|study|deep\s+work|call|read|reading)\b", raw_text))
+        or (bool(re.search(r"\bmeeting\b", raw_text)) and not social_signal)
     )
     needs_seat = req.needsSeat if req.needsSeat is not None else (
         quiet_preferred
         or social_signal
         or needs_outlet
-        or any(w in text for w in ["seat", "table", "sit", "corner", "booth", "work", "stay", "two hours"])
+        or bool(re.search(r"\b(?:seat|table|sit|corner|booth|work|stay|two\s+hours)\b", raw_text))
     )
 
     intent = req.intent
     if not intent:
         if social_signal and not quiet_preferred:
             intent = "catch_up"
-        elif quiet_preferred or "work" in text or "meeting" in text:
+        elif quiet_preferred or re.search(r"\b(?:work|meeting)\b", raw_text):
             intent = "focus"
-        elif any(w in text for w in ["quick", "grab", "hurry", "to go", "takeaway"]) or (ready_within and ready_within <= 10 and not needs_seat):
+        elif re.search(r"\b(?:quick|grab|hurry|to\s+go|takeaway)\b", raw_text) or (
+            ready_within is not None and ready_within <= 10 and not needs_seat
+        ):
             intent = "grab_and_go"
         else:
             intent = "explore"
 
-    # Specific drink mention detection (e.g. "oat latte", "matcha", "cold brew", "almond")
+    # 8. Positive keyword boost — strictly word-bounded AND never includes any negated/allergen-excluded keyword!
+    banned_kws = set(negated_terms)
+    for alg in exclude_allergens:
+        banned_kws.update(ALLERGEN_TO_KEYWORDS.get(alg, set()))
+
     keyword_boost = []
-    for kw in ["oat", "almond", "matcha", "cold brew", "tonic", "espresso", "chai", "croissant", "coconut", "decaf", "hibiscus", "v60"]:
-        if kw in text:
+    for kw in POSITIVE_KEYWORDS:
+        if kw in banned_kws:
+            continue
+        if re.search(rf"\b{re.escape(kw)}\b", positive_text):
             keyword_boost.append(kw)
 
     return {
@@ -156,6 +290,144 @@ def parse_constraints_from_text(req: VisitPlanRequest) -> dict[str, Any]:
     }
 
 
+async def extract_constraints_with_gemini(
+    req: VisitPlanRequest,
+    settings: Settings,
+) -> dict[str, Any]:
+    """
+    Uses Gemini structured output (Pydantic schema) to extract constraints when live credentials
+    are active, then deterministically clamps and overlays regex allergy/negation protections.
+    Falls back cleanly to deterministic parser if unavailable.
+    """
+    fallback = parse_constraints_from_text(req)
+    if not settings.has_gemini_credentials:
+        return fallback
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        if settings.google_genai_use_vertexai and settings.google_cloud_project:
+            client = genai.Client(
+                vertexai=True,
+                project=settings.google_cloud_project,
+                location=settings.google_cloud_location,
+            )
+        elif settings.google_api_key:
+            client = genai.Client(api_key=settings.google_api_key)
+        else:
+            return fallback
+
+        sys_prompt = (
+            "Extract café visit constraints from the customer's message into JSON. "
+            "Map almond, cashew, hazelnut, walnut, pistachio, and peanut allergies to 'tree_nuts'. "
+            "Map 'no milk' / 'lactose' / 'dairy-free' to excludeAllergens=['dairy'] and dietaryTags=['dairy-free']. "
+            "Never put an allergen or negated item into preferredKeywords. "
+            "Never confuse 'within N minutes' with a rupee budget."
+        )
+        resp = await asyncio.wait_for(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.gemini_model,
+                contents=req.message,
+                config=types.GenerateContentConfig(
+                    system_instruction=sys_prompt,
+                    response_mime_type="application/json",
+                    response_schema=StructuredIntentOutput,
+                    temperature=0.0,
+                ),
+            ),
+            timeout=8.0,
+        )
+        parsed = StructuredIntentOutput.model_validate_json(resp.text or "{}")
+
+        # Deterministically clamp & merge safety-critical allergen exclusions from BOTH LLM & regex
+        merged_allergens = set(fallback["excludeAllergens"])
+        for a in parsed.excludeAllergens:
+            merged_allergens.add(ALLERGEN_SYNONYMS.get(a.lower().strip(), a.lower().strip()))
+
+        banned_kws: set[str] = set()
+        for alg in merged_allergens:
+            banned_kws.update(ALLERGEN_TO_KEYWORDS.get(alg, set()))
+
+        merged_dietary = set(fallback["dietaryTags"]) | {t.lower().strip() for t in parsed.dietaryTags if t.strip()}
+        if "oats" in merged_allergens:
+            merged_dietary.discard("oat")
+        if "dairy" in merged_allergens:
+            merged_dietary.add("dairy-free")
+
+        safe_kws = [
+            kw.lower().strip()
+            for kw in (parsed.preferredKeywords or fallback["keywordBoost"])
+            if kw.lower().strip() in POSITIVE_KEYWORDS and kw.lower().strip() not in banned_kws
+        ]
+
+        max_rs = req.maxBudgetRupees or parsed.maxPriceRupees or fallback["maxPriceRupees"]
+        if max_rs is not None:
+            max_rs = max(30, min(5000, int(max_rs)))
+
+        ready_min = req.readyWithinMinutes or parsed.readyWithinMinutes or fallback["readyWithinMinutes"]
+        if ready_min is not None:
+            ready_min = max(3, min(120, int(ready_min)))
+
+        return {
+            "intent": req.intent or parsed.intent or fallback["intent"],
+            "maxPricePaise": max_rs * 100 if max_rs is not None else None,
+            "maxPriceRupees": max_rs,
+            "readyWithinMinutes": ready_min,
+            "temperature": parsed.temperature or fallback["temperature"],
+            "notTooSweet": bool(parsed.notTooSweet or fallback["notTooSweet"]),
+            "dietaryTags": sorted(merged_dietary),
+            "excludeAllergens": sorted(merged_allergens),
+            "caffeineFree": bool(parsed.caffeineFree or fallback["caffeineFree"]),
+            "needsSeat": bool(req.needsSeat if req.needsSeat is not None else (parsed.needsSeat or fallback["needsSeat"])),
+            "needsOutlet": bool(req.needsOutlet if req.needsOutlet is not None else (parsed.needsOutlet or fallback["needsOutlet"])),
+            "quietPreferred": bool(req.quietPreferred if req.quietPreferred is not None else (parsed.quietPreferred or fallback["quietPreferred"])),
+            "keywordBoost": safe_kws,
+            "extractionSource": "gemini_structured",
+        }
+    except Exception as exc:
+        logger.warning("Gemini structured constraint extraction fell back to deterministic parser: %s", exc)
+        return fallback
+
+
+def validate_grounded_summary(
+    summary: str,
+    grounded_candidates: list[dict[str, Any]],
+    unavailable_candidates: list[dict[str, Any]],
+    all_menu_items: list[dict[str, Any]],
+    max_price_rupees: int | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Post-generation grounding validator for Gemini prose:
+      1. Every ₹ amount mentioned must match an exact candidate rupee price (or user's stated budget).
+      2. Every catalog drink name mentioned must belong strictly to grounded_candidates or unavailable_candidates.
+    Returns (is_valid, failure_reason).
+    """
+    allowed_rupees: set[int] = set()
+    for c in grounded_candidates + unavailable_candidates:
+        if "priceRupees" in c:
+            allowed_rupees.add(int(round(float(c["priceRupees"]))))
+        elif "pricePaise" in c:
+            allowed_rupees.add(int(round(int(c["pricePaise"]) / 100.0)))
+    if max_price_rupees is not None:
+        allowed_rupees.add(int(max_price_rupees))
+
+    for m in re.finditer(r"(?:₹|rs\.?)\s*(\d+(?:\.\d+)?)", summary, flags=re.IGNORECASE):
+        mentioned = int(round(float(m.group(1))))
+        if mentioned not in allowed_rupees:
+            return False, f"Ungrounded price ₹{mentioned} not in verified candidates {sorted(allowed_rupees)}"
+
+    allowed_names = {c["name"].lower() for c in grounded_candidates + unavailable_candidates}
+    lower_summary = summary.lower()
+    for item in all_menu_items:
+        iname = item["name"].lower()
+        if iname in lower_summary and iname not in allowed_names:
+            return False, f"Mentioned unverified or excluded drink '{item['name']}'"
+
+    return True, None
+
+
 async def _run_adk_explanation(
     settings: Settings,
     user_message: str,
@@ -167,11 +439,6 @@ async def _run_adk_explanation(
     tools_dict: dict[str, Any],
     user_id: str,
 ) -> tuple[str | None, str | None, str | None]:
-    """
-    Runs a genuine Google ADK LlmAgent backed by Gemini Flash via Vertex AI / Google GenAI SDK.
-    Returns (summary_text, model_id, error_reason).
-    Grounded strictly on verified tool outputs; never allowed to invent items, stock, or prices.
-    """
     if not settings.has_gemini_credentials:
         return None, None, "no_credentials"
 
@@ -193,9 +460,10 @@ async def _run_adk_explanation(
             "You are AURA, a warm, concise specialty café concierge. "
             "You MUST rely strictly on the verified live tool data provided below. "
             "NEVER invent menu items, prices, stock quantities, or pickup times. "
+            "NEVER mention drinks outside the verified lists. "
             "NEVER claim an order has been placed — always state that the customer must click Confirm to reserve stock. "
             "Respond in 2-3 crisp sentences explaining why the top recommended drink(s) and optional seat match the guest's request, "
-            "noting real rupee prices (₹) and estimated prep window. If an item was unavailable due to stock, mention the in-stock substitute."
+            "noting exact rupee prices (₹) and estimated prep window."
         )
 
         agent = LlmAgent(
@@ -278,8 +546,12 @@ async def generate_visit_plan(
             dataAsOf=now_iso,
         )
 
-    # 2. Extract constraints + incorporate consent-granted user preferences
-    constraints = parse_constraints_from_text(req)
+    # 2. Extract constraints (Gemini structured output with deterministic clamp, or deterministic fallback)
+    constraints = (
+        parse_constraints_from_text(req)
+        if force_deterministic
+        else await extract_constraints_with_gemini(req, cfg)
+    )
     if user is not None:
         prefs = store.get_preferences(cafe_id, user.uid)
         if prefs.get("consentGranted"):
@@ -313,7 +585,7 @@ async def generate_visit_plan(
     matches = drink_search["matches"]
     unavailable = drink_search["unavailableMatches"]
 
-    # Boost keyword matches gently (e.g., user asked specifically for "oat" or "cold brew")
+    # Boost ONLY safe, non-negated positive keywords
     kws = constraints.get("keywordBoost", [])
     if kws and matches:
         matches.sort(
@@ -323,7 +595,7 @@ async def generate_visit_plan(
             )
         )
 
-    # If exact constraints returned 0 in-stock items (e.g., oat milk sold out!), find real in-stock substitutes!
+    # If exact constraints returned 0 in-stock items, find real in-stock substitutes respecting ALLERGEN EXCLUSIONS!
     alternatives: list[dict[str, Any]] = []
     if not matches:
         relaxed_tags = [t for t in constraints["dietaryTags"] if t != "oat"]
@@ -355,7 +627,8 @@ async def generate_visit_plan(
 
     top_pool = matches[:3] if matches else alternatives[:3]
     top_ids = [d["id"] for d in top_pool]
-    stock_checks = tools["check_ingredients"](top_ids) if top_ids else []
+    if top_ids:
+        tools["check_ingredients"](top_ids)
     tool_evidence.append({"tool": "check_ingredients", "checkedItemIds": top_ids})
 
     # 4. Deterministic ETA check
@@ -375,7 +648,7 @@ async def generate_visit_plan(
             f"Current barista queue estimate is {eta['minMinutes']}–{eta['maxMinutes']} min, which may exceed your {ready_limit}-minute window."
         )
 
-    # 5. Seat search (only if requested or intent benefits from a seat)
+    # 5. Seat search
     seat_obj: RecommendedSeat | None = None
     seat_dict: dict[str, Any] | None = None
     if constraints["needsSeat"]:
@@ -404,7 +677,6 @@ async def generate_visit_plan(
         else:
             warnings.append("No free matching seats are currently open; you can still order for pickup.")
 
-    # 6. Format grounded drink recommendations
     def _to_rec(d: dict[str, Any]) -> RecommendedDrink:
         reasons = [f"₹{int(d['priceRupees'])}", f"{d['availableServings']} servings in stock"]
         if d["sweetness"] in ("unsweetened", "lightly_sweet"):
@@ -427,7 +699,7 @@ async def generate_visit_plan(
     rec_drinks = [_to_rec(d) for d in matches[:3]]
     alt_drinks = [_to_rec(d) for d in alternatives[:3]]
 
-    # 7. Proposed cart + approval preview (if user is authenticated and a valid drink exists)
+    # 6. Proposed cart + approval preview (server-issued token; agent NEVER commits orders)
     proposed_cart: list[OrderItemInput] = []
     approval_preview = None
     chosen = rec_drinks[0] if rec_drinks else (alt_drinks[0] if alt_drinks else None)
@@ -446,17 +718,18 @@ async def generate_visit_plan(
             except ValueError as exc:
                 warnings.append(str(exc))
 
-    # 8. Optional Gemini ADK explanation layer (clearly labeled as "gemini" vs "deterministic")
+    # 7. Optional Gemini ADK explanation + strict grounding validation
     source: str = "deterministic"
     model_id: str | None = None
     summary: str = ""
 
     if not force_deterministic and cfg.has_gemini_credentials:
+        cand_dicts = [r.model_dump() for r in (rec_drinks or alt_drinks)]
         llm_text, used_model, err = await _run_adk_explanation(
             settings=cfg,
             user_message=req.message,
             constraints=constraints,
-            grounded_candidates=[r.model_dump() for r in (rec_drinks or alt_drinks)],
+            grounded_candidates=cand_dicts,
             unavailable_candidates=unavailable,
             seat_candidate=seat_dict,
             eta=eta,
@@ -464,9 +737,20 @@ async def generate_visit_plan(
             user_id=user.uid if user else "guest",
         )
         if llm_text:
-            summary = llm_text
-            source = "gemini"
-            model_id = used_model
+            is_valid, fail_reason = validate_grounded_summary(
+                summary=llm_text,
+                grounded_candidates=cand_dicts,
+                unavailable_candidates=unavailable,
+                all_menu_items=store.list_menu_items(cafe_id),
+                max_price_rupees=constraints.get("maxPriceRupees"),
+            )
+            if is_valid:
+                summary = llm_text
+                source = "gemini"
+                model_id = used_model
+            else:
+                logger.warning("Rejected ungrounded Gemini summary (%s); using deterministic summary", fail_reason)
+                warnings.append("AI explanation failed grounding check; showing verified deterministic summary.")
         elif err and err != "no_credentials":
             warnings.append("AI language layer temporarily unavailable; showing verified deterministic café plan.")
 

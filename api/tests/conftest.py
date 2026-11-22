@@ -22,13 +22,17 @@ from app.store.memory_store import MemoryCafeStore
 @pytest.fixture
 def test_settings() -> Settings:
     return Settings(
+        _env_file=None,
         aura_env="local",
         aura_store_mode="memory",
         demo_cafe_id="demo-cafe",
         allow_demo_auth=True,
+        demo_staff_passcode="test-staff-pass-2026",
         enable_live_gemini=False,
         approval_token_secret="test-secret-for-unit-tests-only-1234567890",
         daily_ai_budget_requests=200,
+        per_user_daily_ai_limit=100,
+        per_guest_ip_daily_limit=10,
         per_user_ai_rpm=100,
     )
 

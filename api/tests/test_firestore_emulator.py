@@ -135,3 +135,35 @@ def test_firestore_emulator_low_stock_clamped_above_reserved(fs_store: Firestore
     oat = fs_store.get_ingredient("demo-cafe", "oat_milk_ml")
     assert oat["reserved"] == 360
     assert oat["onHand"] >= oat["reserved"]
+
+
+def test_firestore_emulator_readonly_list_tables_and_transactional_release(fs_store: FirestoreCafeStore):
+    from datetime import datetime, timedelta, timezone
+
+    tbl, res = fs_store.reserve_table_tx("demo-cafe", "W1", "guest-release", 30)
+    assert tbl["status"] == "reserved"
+    res_id = res["id"]
+
+    # Transactional release sets table free AND reservation state == 'cancelled'
+    released = fs_store.release_table_tx("demo-cafe", "W1", "guest-release")
+    assert released["status"] == "free"
+    res_snap = fs_store._col("demo-cafe", "reservations").document(res_id).get()
+    assert res_snap.exists and res_snap.to_dict()["state"] == "cancelled"
+
+    # Expired reservation: list_tables computes free in memory WITHOUT mutating Firestore!
+    _, res2 = fs_store.reserve_table_tx("demo-cafe", "W1", "guest-exp", 30)
+    past = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    fs_store._col("demo-cafe", "tables").document("W1").update({"reservationExpiresAt": past})
+
+    listed = {t["id"]: t for t in fs_store.list_tables("demo-cafe")}
+    assert listed["W1"]["status"] == "free"
+    # Raw Firestore doc was NOT written by GET list_tables!
+    raw_after_list = fs_store._col("demo-cafe", "tables").document("W1").get().to_dict()
+    assert raw_after_list["status"] == "reserved"
+
+    # Next reserve_table_tx transitions old reservation doc to 'expired' atomically
+    _, res3 = fs_store.reserve_table_tx("demo-cafe", "W1", "guest-new", 30)
+    assert res3["id"] != res2["id"]
+    old_snap = fs_store._col("demo-cafe", "reservations").document(res2["id"]).get().to_dict()
+    assert old_snap["state"] == "expired"
+

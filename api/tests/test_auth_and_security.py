@@ -111,3 +111,26 @@ def test_tampered_cart_or_approval_token_rejected(client, auth_headers):
         json={"items": [{"menuItemId": "classic-cold-brew", "qty": 1}], "idempotencyKey": f"forg-{uuid.uuid4().hex}", "approvalToken": "apr.fakehash.9999999999.badsig"},
     )
     assert forged.status_code in (400, 403)
+
+
+def test_demo_login_allows_customers_publicly_but_gates_staff_with_passcode(client):
+    # Customers work publicly without passcode
+    c_ok = client.post("/api/v1/public/demo-login", json={"persona": "customer-1"})
+    assert c_ok.status_code == 200
+    assert c_ok.json()["user"]["role"] == "customer"
+
+    # Barista & Manager REJECTED without staffPasscode
+    assert client.post("/api/v1/public/demo-login", json={"persona": "barista-1"}).status_code == 403
+    assert client.post("/api/v1/public/demo-login", json={"persona": "manager-1"}).status_code == 403
+    assert (
+        client.post("/api/v1/public/demo-login", json={"persona": "manager-1", "staffPasscode": "wrong"}).status_code
+        == 403
+    )
+
+    # Valid staffPasscode succeeds
+    m_ok = client.post(
+        "/api/v1/public/demo-login",
+        json={"persona": "manager-1", "staffPasscode": "test-staff-pass-2026"},
+    )
+    assert m_ok.status_code == 200
+    assert m_ok.json()["user"]["role"] == "manager"
