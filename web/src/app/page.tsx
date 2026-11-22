@@ -95,8 +95,9 @@ export default function HomePage() {
         ) : (
           <EspressoFallbackVisual scrollProgress={scrollProgress} overview={overview} tables={tables} />
         )}
-        {/* Subtle readability vignette */}
+        {/* Subtle readability vignette + left-side headline scrim */}
         <div className="absolute inset-0 bg-gradient-to-b from-espresso/50 via-transparent to-espresso/85" />
+        <div className="absolute inset-0 bg-gradient-to-r from-espresso/80 via-espresso/30 to-transparent" />
       </div>
 
       {/* 5-Scene Scroll Narrative Overlay */}
